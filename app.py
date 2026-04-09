@@ -1,7 +1,7 @@
-
 import os
 import re
 from flask import Flask, request, jsonify, render_template
+from flask_cors import CORS
 from deep_translator import GoogleTranslator
 
 APP_TITLE = "TurboLine Blog Translator"
@@ -40,6 +40,7 @@ FIX_CASING = True
 SRT_BATCH_SIZE = 80
 TEXT_BATCH_SIZE = 20
 
+
 def load_map_file(path: str):
     entries = []
     if not os.path.exists(path):
@@ -64,6 +65,7 @@ def load_map_file(path: str):
             entries.append((src, tgt, pat))
     return entries
 
+
 def apply_map(text: str, entries):
     hits = 0
     for _src, tgt, pat in entries:
@@ -74,8 +76,10 @@ def apply_map(text: str, entries):
         text = pat.sub(tgt, text)
     return text, hits
 
+
 def looks_like_srt(text: str) -> bool:
     return any(SRT_TIME_RE.match(line.strip()) for line in text.splitlines())
+
 
 def safe_translate_text(text: str, src_lang: str, tgt_lang: str, retries: int = 2):
     if not text.strip():
@@ -93,6 +97,7 @@ def safe_translate_text(text: str, src_lang: str, tgt_lang: str, retries: int = 
             pass
     return text
 
+
 def safe_translate_batch(lines, src_lang: str, tgt_lang: str):
     """Batch translate many items at once for speed."""
     if not lines:
@@ -108,13 +113,16 @@ def safe_translate_batch(lines, src_lang: str, tgt_lang: str):
         pass
     return [safe_translate_text(x, src_lang, tgt_lang) for x in lines]
 
+
 def chunk_list(items, n):
     for i in range(0, len(items), n):
-        yield items[i:i+n]
+        yield items[i:i + n]
+
 
 _UPPER_GR = "ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩΆΈΉΊΌΎΏΪΫ"
 _LOWER_GR = "αβγδεζηθικλμνξοπρστυφχψωάέήίόύώϊϋ"
 _GR_TRANS = str.maketrans(_UPPER_GR, _LOWER_GR)
+
 
 def lower_first_letter(token: str) -> str:
     if not token:
@@ -125,6 +133,7 @@ def lower_first_letter(token: str) -> str:
     if "A" <= ch <= "Z":
         return ch.lower() + token[1:]
     return token
+
 
 def split_balanced_subtitle_line(s: str, max_chars: int = 42) -> str:
     s = " ".join(part.strip() for part in s.splitlines() if part.strip())
@@ -177,6 +186,7 @@ def split_balanced_subtitle_line(s: str, max_chars: int = 42) -> str:
         right = lower_first_letter(right)
     return left + "\n" + right
 
+
 def fix_casing_punctuation_text(text: str, tgt_lang: str) -> str:
     """For plain text only. Never use on raw SRT because it can break timings/indexes."""
     if not text:
@@ -194,12 +204,15 @@ def fix_casing_punctuation_text(text: str, tgt_lang: str) -> str:
     if tgt_lang == "el":
         def _lc_after_sep(m):
             return m.group(1) + " " + lower_first_letter(m.group(2))
+
         def _lc_after_sep_nl(m):
             return m.group(1) + "\n" + lower_first_letter(m.group(2))
+
         text = re.sub(r"([,;:])\s+([A-ZΑ-ΩΆΈΉΊΌΎΏ])", _lc_after_sep, text)
         text = re.sub(r"([,;:])\s*\n\s*([A-ZΑ-ΩΆΈΉΊΌΎΏ])", _lc_after_sep_nl, text)
 
     return text
+
 
 def fix_casing_punctuation_srt(srt_text: str, tgt_lang: str) -> str:
     """SRT-safe casing/punctuation cleanup. Keeps index/timing lines untouched."""
@@ -225,6 +238,7 @@ def fix_casing_punctuation_srt(srt_text: str, tgt_lang: str) -> str:
         out_blocks.append("\n".join([idx, timing] + merged.splitlines()))
 
     return "\n\n".join(out_blocks) + "\n"
+
 
 def humanize_greek(text: str) -> str:
     t = text or ""
@@ -271,6 +285,7 @@ def humanize_greek(text: str) -> str:
         t = "\n\n".join(out_blocks) + "\n"
 
     return t.strip()
+
 
 def translate_srt(text: str, src_lang: str, tgt_lang: str):
     blocks = re.split(r"\n{2,}", text.replace("\r\n", "\n").replace("\r", "\n").strip())
@@ -327,6 +342,7 @@ def translate_srt(text: str, src_lang: str, tgt_lang: str):
         result = fix_casing_punctuation_srt(result, tgt_lang)
     return result
 
+
 def translate_text_fast(text: str, src_lang: str, tgt_lang: str):
     """Batch translate plain text by paragraphs for speed."""
     paragraphs = [p.strip() for p in re.split(r"\n{2,}", text) if p.strip()]
@@ -344,13 +360,18 @@ def translate_text_fast(text: str, src_lang: str, tgt_lang: str):
         result = fix_casing_punctuation_text(result, tgt_lang)
     return result
 
+
 app = Flask(__name__)
+CORS(app, resources={r"/api/*": {"origins": ["https://homemade-ai.blogspot.com"]}})
+
 GLOSSARY = load_map_file(GLOSSARY_FILE)
 POST_RULES = load_map_file(POST_RULES_FILE)
+
 
 @app.get("/")
 def home():
     return render_template("index.html", title=APP_TITLE)
+
 
 @app.post("/api/translate")
 def api_translate():
@@ -396,6 +417,7 @@ def api_translate():
         "post_hits": post_hits
     })
 
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=port)
