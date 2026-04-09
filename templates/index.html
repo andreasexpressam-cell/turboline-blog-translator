@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>TurboLine Blog Translator</h1>
+    <p class="sub">Γρήγορη μετάφραση κειμένου και SRT</p>
+
+    <div class="toolbar">
+      <select id="src_lang">
+        <option value="auto">Αυτόματο</option>
+        <option value="en">Αγγλικά</option>
+        <option value="fr">Γαλλικά</option>
+        <option value="it">Ιταλικά</option>
+        <option value="de">Γερμανικά</option>
+        <option value="es">Ισπανικά</option>
+        <option value="pt">Πορτογαλικά</option>
+        <option value="ar">Αραβικά</option>
+        <option value="nl">Ολλανδικά</option>
+        <option value="ja">Ιαπωνικά</option>
+        <option value="ru">Ρωσικά</option>
+        <option value="tr">Τουρκικά</option>
+        <option value="el">Ελληνικά</option>
+      </select>
+
+      <select id="tgt_lang">
+        <option value="el" selected>Ελληνικά</option>
+        <option value="en">Αγγλικά</option>
+        <option value="fr">Γαλλικά</option>
+        <option value="it">Ιταλικά</option>
+        <option value="de">Γερμανικά</option>
+        <option value="es">Ισπανικά</option>
+        <option value="pt">Πορτογαλικά</option>
+        <option value="ar">Αραβικά</option>
+        <option value="nl">Ολλανδικά</option>
+        <option value="ja">Ιαπωνικά</option>
+        <option value="ru">Ρωσικά</option>
+        <option value="tr">Τουρκικά</option>
+      </select>
+
+      <button id="translate_btn">Μετάφραση</button>
+      <button id="clear_btn" class="secondary">Καθάρισμα</button>
+    </div>
+
+    <div class="panes">
+      <div class="pane">
+        <label for="input_text">Πρωτότυπο</label>
+        <textarea id="input_text" placeholder="Κάνε επικόλληση κειμένου ή SRT εδώ..."></textarea>
+      </div>
+      <div class="pane">
+        <label for="output_text">Αποτέλεσμα</label>
+        <textarea id="output_text" readonly></textarea>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="copy_btn" class="secondary">Αντιγραφή αποτελέσματος</button>
+      <span id="status">Έτοιμο</span>
+    </div>
+  </div>
+
+<script>
+const inputText = document.getElementById("input_text");
+const outputText = document.getElementById("output_text");
+const statusEl = document.getElementById("status");
+
+document.getElementById("translate_btn").addEventListener("click", async () => {
+  const payload = {
+    text: inputText.value,
+    src_lang: document.getElementById("src_lang").value,
+    tgt_lang: document.getElementById("tgt_lang").value
+  };
+
+  statusEl.textContent = "Μετάφραση...";
+  outputText.value = "";
+
+  try {
+    const res = await fetch("/api/translate", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    outputText.value = data.result || "";
+    statusEl.textContent = `Έτοιμο | Glossary: ${data.glossary_hits || 0} | Post-rules: ${data.post_hits || 0}`;
+  } catch (err) {
+    statusEl.textContent = "Σφάλμα";
+    outputText.value = "Κάτι πήγε στραβά.";
+  }
+});
+
+document.getElementById("clear_btn").addEventListener("click", () => {
+  inputText.value = "";
+  outputText.value = "";
+  statusEl.textContent = "Έτοιμο";
+});
+
+document.getElementById("copy_btn").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(outputText.value);
+    statusEl.textContent = "Αντιγράφηκε";
+  } catch {
+    statusEl.textContent = "Δεν έγινε αντιγραφή";
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #06111f;
+  color: #eaf2ff;
+}
+.container {
+  max-width: 1380px;
+  margin: 24px auto;
+  padding: 20px;
+}
+h1 {
+  margin: 0 0 8px;
+  color: #9ecbff;
+  font-size: 3rem;
+}
+.sub {
+  margin: 0 0 18px;
+  color: #9fb4d1;
+  font-size: 1.1rem;
+}
+.toolbar, .actions {
+  background: #0b1b30;
+  border: 1px solid #163558;
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+select, button {
+  margin-right: 12px;
+  margin-bottom: 8px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 1px solid #29507b;
+  background: #10243f;
+  color: #fff;
+  font-size: 1rem;
+}
+button {
+  background: #3b73e4;
+  cursor: pointer;
+}
+button.secondary {
+  background: #3a4f70;
+}
+button:hover {
+  background: #4c82f1;
+}
+button.secondary:hover {
+  background: #4b638a;
+}
+.panes {
+  display: flex;
+  gap: 18px;
+}
+.pane {
+  flex: 1;
+}
+label {
+  display: block;
+  margin: 0 0 6px;
+  color: #d7e6ff;
+  font-size: 1rem;
+}
+textarea {
+  width: 100%;
+  min-height: 520px;
+  border-radius: 14px;
+  border: 1px solid #23466d;
+  background: #081626;
+  color: #f4f7fb;
+  padding: 14px;
+  box-sizing: border-box;
+  resize: vertical;
+  font-family: Consolas, monospace;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+#status {
+  color: #bdd6f7;
+}
