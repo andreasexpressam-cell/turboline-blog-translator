@@ -30,13 +30,11 @@ LANG_MAP = {
     "pl": "pl",
 }
 
-# Internal engine switches (hidden from UI)
 SMART_MODE = True
 USE_GLOSSARY = True
 USE_POST_RULES = True
 FIX_CASING = True
 
-# Speed tuning
 SRT_BATCH_SIZE = 80
 TEXT_BATCH_SIZE = 20
 
@@ -99,7 +97,6 @@ def safe_translate_text(text: str, src_lang: str, tgt_lang: str, retries: int = 
 
 
 def safe_translate_batch(lines, src_lang: str, tgt_lang: str):
-    """Batch translate many items at once for speed."""
     if not lines:
         return []
     src_lang = LANG_MAP.get(src_lang, src_lang)
@@ -188,7 +185,6 @@ def split_balanced_subtitle_line(s: str, max_chars: int = 42) -> str:
 
 
 def fix_casing_punctuation_text(text: str, tgt_lang: str) -> str:
-    """For plain text only. Never use on raw SRT because it can break timings/indexes."""
     if not text:
         return text
 
@@ -215,7 +211,6 @@ def fix_casing_punctuation_text(text: str, tgt_lang: str) -> str:
 
 
 def fix_casing_punctuation_srt(srt_text: str, tgt_lang: str) -> str:
-    """SRT-safe casing/punctuation cleanup. Keeps index/timing lines untouched."""
     blocks = re.split(r"\n{2,}", srt_text.replace("\r\n", "\n").replace("\r", "\n").strip())
     out_blocks = []
 
@@ -344,7 +339,6 @@ def translate_srt(text: str, src_lang: str, tgt_lang: str):
 
 
 def translate_text_fast(text: str, src_lang: str, tgt_lang: str):
-    """Batch translate plain text by paragraphs for speed."""
     paragraphs = [p.strip() for p in re.split(r"\n{2,}", text) if p.strip()]
     if not paragraphs:
         return safe_translate_text(text, src_lang, tgt_lang)
@@ -362,7 +356,12 @@ def translate_text_fast(text: str, src_lang: str, tgt_lang: str):
 
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": ["https://homemade-ai.blogspot.com"]}})
+CORS(
+    app,
+    resources={r"/api/*": {"origins": "*"}},
+    allow_headers=["Content-Type"],
+    methods=["GET", "POST", "OPTIONS"]
+)
 
 GLOSSARY = load_map_file(GLOSSARY_FILE)
 POST_RULES = load_map_file(POST_RULES_FILE)
@@ -373,8 +372,11 @@ def home():
     return render_template("index.html", title=APP_TITLE)
 
 
-@app.post("/api/translate")
+@app.route("/api/translate", methods=["POST", "OPTIONS"])
 def api_translate():
+    if request.method == "OPTIONS":
+        return jsonify({"ok": True})
+
     data = request.get_json(force=True, silent=True) or {}
     text = (data.get("text") or "").strip()
     src = data.get("src_lang", "auto")
@@ -403,7 +405,6 @@ def api_translate():
     if USE_POST_RULES and POST_RULES:
         translated, post_hits = apply_map(translated, POST_RULES)
 
-    # Final safe cleanup
     if FIX_CASING:
         if looks_like_srt(translated):
             translated = fix_casing_punctuation_srt(translated, tgt)
