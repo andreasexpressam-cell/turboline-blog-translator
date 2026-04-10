@@ -215,10 +215,10 @@
     const API_URL = "/api/translate";
     const SRT_TIME_RE = /^\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3}$/;
 
-    const FRONTEND_SRT_BLOCKS_PER_CHUNK = 20;
-    const REQUEST_DELAY_MS = 500;
-    const RETRY_COUNT = 3;
-    const RETRY_DELAY_MS = 1200;
+    const FRONTEND_SRT_BLOCKS_PER_CHUNK = 10;
+    const REQUEST_DELAY_MS = 800;
+    const RETRY_COUNT = 4;
+    const RETRY_DELAY_MS = 1800;
 
     function normalizeNewlines(text) {
       return (text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
