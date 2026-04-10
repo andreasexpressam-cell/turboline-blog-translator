@@ -1,5 +1,6 @@
 import os
 import re
+import time
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from deep_translator import GoogleTranslator
@@ -8,7 +9,9 @@ APP_TITLE = "TurboLine Blog Translator"
 GLOSSARY_FILE = "glossary.txt"
 POST_RULES_FILE = "post_rules.txt"
 
-SRT_TIME_RE = re.compile(r"^\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3}")
+SRT_TIME_RE = re.compile(
+    r"^\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3}$"
+)
 
 LANG_MAP = {
     "auto": "auto",
@@ -35,32 +38,43 @@ USE_GLOSSARY = True
 USE_POST_RULES = True
 FIX_CASING = True
 
-SRT_BATCH_SIZE = 80
-TEXT_BATCH_SIZE = 20
+# Πιο συντηρητικά όρια για free Render / μεγάλα SRT
+SRT_BATCH_SIZE = 35
+SRT_BATCH_MAX_CHARS = 1600
+TEXT_BATCH_SIZE = 12
+TEXT_BATCH_MAX_CHARS = 2200
+
+REQUEST_SLEEP_BETWEEN_BATCHES = 0.15
 
 
 def load_map_file(path: str):
     entries = []
     if not os.path.exists(path):
         return entries
+
     with open(path, "r", encoding="utf-8-sig") as f:
         for raw in f:
             line = raw.strip()
             if not line or line.startswith("#"):
                 continue
+
             sep = None
             for candidate in ("=>", "=", "->", "\t"):
                 if candidate in line:
                     sep = candidate
                     break
+
             if not sep:
                 continue
+
             src, tgt = line.split(sep, 1)
             src, tgt = src.strip(), tgt.strip()
             if not src or not tgt:
                 continue
+
             pat = re.compile(re.escape(src), re.IGNORECASE)
             entries.append((src, tgt, pat))
+
     return entries
 
 
@@ -79,41 +93,77 @@ def looks_like_srt(text: str) -> bool:
     return any(SRT_TIME_RE.match(line.strip()) for line in text.splitlines())
 
 
+def chunk_list(items, n):
+    for i in range(0, len(items), n):
+        yield items[i:i + n]
+
+
+def chunk_by_char_budget(items, max_items: int, max_chars: int):
+    bucket = []
+    current_chars = 0
+
+    for item in items:
+        item_len = len(item)
+
+        if bucket and (len(bucket) >= max_items or current_chars + item_len > max_chars):
+            yield bucket
+            bucket = []
+            current_chars = 0
+
+        bucket.append(item)
+        current_chars += item_len
+
+    if bucket:
+        yield bucket
+
+
 def safe_translate_text(text: str, src_lang: str, tgt_lang: str, retries: int = 2):
     if not text.strip():
         return ""
+
     src_lang = LANG_MAP.get(src_lang, src_lang)
     tgt_lang = LANG_MAP.get(tgt_lang, tgt_lang)
-    for _ in range(retries + 1):
+
+    last_error = None
+    for attempt in range(retries + 1):
         try:
             tr = GoogleTranslator(source=src_lang, target=tgt_lang)
             out = tr.translate(text)
             if out is None:
                 raise RuntimeError("Translator returned None")
             return str(out)
-        except Exception:
-            pass
+        except Exception as e:
+            last_error = e
+            if attempt < retries:
+                time.sleep(0.4)
+
     return text
 
 
 def safe_translate_batch(lines, src_lang: str, tgt_lang: str):
     if not lines:
         return []
+
     src_lang = LANG_MAP.get(src_lang, src_lang)
     tgt_lang = LANG_MAP.get(tgt_lang, tgt_lang)
+
+    # 1) Προσπάθεια με translate_batch
     try:
         tr = GoogleTranslator(source=src_lang, target=tgt_lang)
         out = tr.translate_batch(lines)
         if out and len(out) == len(lines):
-            return [str(x) if x is not None else "" for x in out]
+            normalized = []
+            for x in out:
+                if x is None:
+                    normalized.append("")
+                else:
+                    normalized.append(str(x))
+            return normalized
     except Exception:
         pass
+
+    # 2) Fallback: μία-μία
     return [safe_translate_text(x, src_lang, tgt_lang) for x in lines]
-
-
-def chunk_list(items, n):
-    for i in range(0, len(items), n):
-        yield items[i:i + n]
 
 
 _UPPER_GR = "ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩΆΈΉΊΌΎΏΪΫ"
@@ -135,6 +185,7 @@ def lower_first_letter(token: str) -> str:
 def split_balanced_subtitle_line(s: str, max_chars: int = 42) -> str:
     s = " ".join(part.strip() for part in s.splitlines() if part.strip())
     s = re.sub(r"\s{2,}", " ", s).strip()
+
     if not s or len(s) <= max_chars:
         return s
 
@@ -148,20 +199,23 @@ def split_balanced_subtitle_line(s: str, max_chars: int = 42) -> str:
     best_cut = -1
     best_score = 10**9
 
-    for m in preferred_markers:
+    for marker in preferred_markers:
         start = 0
         while True:
-            idx = s.find(m, start)
+            idx = s.find(marker, start)
             if idx == -1:
                 break
-            cut = idx + 1 if m.startswith(",") else idx
+
+            cut = idx + 1 if marker.startswith(",") else idx
             if cut < 10 or cut > len(s) - 10:
                 start = idx + 1
                 continue
+
             score = abs(cut - mid)
             if score < best_score:
                 best_score = score
                 best_cut = cut
+
             start = idx + 1
 
     if best_cut == -1:
@@ -169,18 +223,22 @@ def split_balanced_subtitle_line(s: str, max_chars: int = 42) -> str:
             if s[i] == " ":
                 best_cut = i
                 break
+
     if best_cut == -1:
         for i in range(mid, min(len(s), mid + 24)):
             if s[i] == " ":
                 best_cut = i
                 break
+
     if best_cut == -1:
         return s
 
     left = s[:best_cut].rstrip(" ,")
     right = s[best_cut:].lstrip(" ,")
+
     if right and left and not re.search(r"[.!?;:]$", left):
         right = lower_first_letter(right)
+
     return left + "\n" + right
 
 
@@ -223,6 +281,7 @@ def fix_casing_punctuation_srt(srt_text: str, tgt_lang: str) -> str:
         idx = lines[0]
         timing = lines[1]
         content = [ln.strip() for ln in lines[2:] if ln.strip()]
+
         if not idx.strip().isdigit() or not SRT_TIME_RE.match(timing.strip()):
             out_blocks.append(block)
             continue
@@ -258,83 +317,129 @@ def humanize_greek(text: str) -> str:
         (r"\bκλιμακωμένη σύγκρουση\b", "κλιμακούμενη σύγκρουση"),
         (r"\bρούτερ\b", "διαδρομή"),
     ]
+
     for pat, repl in replacements:
         t = re.sub(pat, repl, t, flags=re.IGNORECASE)
 
     if looks_like_srt(t):
         blocks = re.split(r"\n{2,}", t.strip())
         out_blocks = []
+
         for block in blocks:
             lines = block.splitlines()
             if len(lines) < 3:
                 out_blocks.append(block)
                 continue
+
             idx = lines[0]
             timing = lines[1]
             content = [ln for ln in lines[2:] if ln.strip()]
+
             if content:
                 merged = " ".join(content)
                 merged = split_balanced_subtitle_line(merged, max_chars=42)
                 content = merged.splitlines()
+
             out_blocks.append("\n".join([idx, timing] + content))
+
         t = "\n\n".join(out_blocks) + "\n"
 
     return t.strip()
 
 
-def translate_srt(text: str, src_lang: str, tgt_lang: str):
+def parse_srt_blocks(text: str):
     blocks = re.split(r"\n{2,}", text.replace("\r\n", "\n").replace("\r", "\n").strip())
     parsed = []
-    dialogue_lines = []
 
     for block in blocks:
         lines = block.splitlines()
+
         if len(lines) < 2:
-            parsed.append(("raw", block))
+            parsed.append({"type": "raw", "raw": block})
             continue
 
         idx = lines[0].strip()
         timing = lines[1].strip()
-        content = lines[2:]
+        content = [ln.strip() for ln in lines[2:] if ln.strip()]
 
         if not idx.isdigit() or not SRT_TIME_RE.match(timing):
-            parsed.append(("raw", block))
+            parsed.append({"type": "raw", "raw": block})
             continue
 
-        clean_dialogue = []
-        for ln in content:
-            s = ln.strip()
-            if s:
-                clean_dialogue.append(s)
-                dialogue_lines.append(s)
+        parsed.append({
+            "type": "srt",
+            "idx": idx,
+            "timing": timing,
+            "content": content,
+        })
 
-        parsed.append(("srt", idx, timing, len(clean_dialogue)))
+    return parsed
+
+
+def rebuild_srt_blocks(parsed_blocks):
+    out_blocks = []
+
+    for item in parsed_blocks:
+        if item["type"] == "raw":
+            out_blocks.append(item["raw"])
+            continue
+
+        lines = item.get("translated_lines") or item.get("content") or [""]
+        merged = " ".join([x.strip() for x in lines if x.strip()]).strip()
+        merged = split_balanced_subtitle_line(merged, max_chars=42)
+        out_blocks.append("\n".join([item["idx"], item["timing"]] + merged.splitlines()))
+
+    return "\n\n".join(out_blocks) + "\n"
+
+
+def translate_srt(parsed_text: str, src_lang: str, tgt_lang: str):
+    parsed_blocks = parse_srt_blocks(parsed_text)
+
+    srt_items = [x for x in parsed_blocks if x["type"] == "srt"]
+    if not srt_items:
+        return parsed_text
+
+    all_dialogues = []
+    ownership = []
+
+    for item_index, item in enumerate(parsed_blocks):
+        if item["type"] != "srt":
+            continue
+
+        translated_placeholder = []
+        for line_index, line in enumerate(item["content"]):
+            translated_placeholder.append("")
+            all_dialogues.append(line)
+            ownership.append((item_index, line_index))
+
+        item["translated_lines"] = translated_placeholder
 
     translated_lines = []
-    for part in chunk_list(dialogue_lines, SRT_BATCH_SIZE):
-        translated_lines.extend(safe_translate_batch(part, src_lang, tgt_lang))
 
-    out_blocks = []
-    pos = 0
-    for item in parsed:
-        if item[0] == "raw":
-            out_blocks.append(item[1])
-            continue
+    for batch in chunk_by_char_budget(
+        all_dialogues,
+        max_items=SRT_BATCH_SIZE,
+        max_chars=SRT_BATCH_MAX_CHARS
+    ):
+        batch_out = safe_translate_batch(batch, src_lang, tgt_lang)
 
-        _, idx, timing, count = item
-        lines = translated_lines[pos:pos + count]
-        pos += count
+        if len(batch_out) != len(batch):
+            batch_out = [safe_translate_text(x, src_lang, tgt_lang) for x in batch]
 
-        merged = " ".join(lines).strip()
-        if tgt_lang == "el" and SMART_MODE:
-            merged = humanize_greek(merged)
+        translated_lines.extend(batch_out)
+        time.sleep(REQUEST_SLEEP_BETWEEN_BATCHES)
 
-        merged = split_balanced_subtitle_line(merged, max_chars=42)
-        out_blocks.append("\n".join([idx, timing] + merged.splitlines()))
+    for translated, (item_index, line_index) in zip(translated_lines, ownership):
+        parsed_blocks[item_index]["translated_lines"][line_index] = translated
 
-    result = "\n\n".join(out_blocks) + "\n"
+    result = rebuild_srt_blocks(parsed_blocks)
+
+    if tgt_lang == "el" and SMART_MODE:
+        result = humanize_greek(result)
+
     if FIX_CASING:
         result = fix_casing_punctuation_srt(result, tgt_lang)
+
     return result
 
 
@@ -344,14 +449,23 @@ def translate_text_fast(text: str, src_lang: str, tgt_lang: str):
         return safe_translate_text(text, src_lang, tgt_lang)
 
     translated_parts = []
-    for part in chunk_list(paragraphs, TEXT_BATCH_SIZE):
-        translated_parts.extend(safe_translate_batch(part, src_lang, tgt_lang))
+    for batch in chunk_by_char_budget(
+        paragraphs,
+        max_items=TEXT_BATCH_SIZE,
+        max_chars=TEXT_BATCH_MAX_CHARS
+    ):
+        batch_out = safe_translate_batch(batch, src_lang, tgt_lang)
+        translated_parts.extend(batch_out)
+        time.sleep(REQUEST_SLEEP_BETWEEN_BATCHES)
 
     result = "\n\n".join(translated_parts)
+
     if tgt_lang == "el" and SMART_MODE:
         result = humanize_greek(result)
+
     if FIX_CASING:
         result = fix_casing_punctuation_text(result, tgt_lang)
+
     return result
 
 
@@ -388,35 +502,50 @@ def api_translate():
         tgt = "el"
 
     if not text:
-        return jsonify({"ok": True, "result": "", "glossary_hits": 0, "post_hits": 0})
+        return jsonify({
+            "ok": True,
+            "result": "",
+            "glossary_hits": 0,
+            "post_hits": 0
+        })
 
     work = text
     glossary_hits = 0
     post_hits = 0
 
-    if USE_GLOSSARY and GLOSSARY:
-        work, glossary_hits = apply_map(work, GLOSSARY)
+    try:
+        if USE_GLOSSARY and GLOSSARY:
+            work, glossary_hits = apply_map(work, GLOSSARY)
 
-    if looks_like_srt(work):
-        translated = translate_srt(work, src, tgt)
-    else:
-        translated = translate_text_fast(work, src, tgt)
-
-    if USE_POST_RULES and POST_RULES:
-        translated, post_hits = apply_map(translated, POST_RULES)
-
-    if FIX_CASING:
-        if looks_like_srt(translated):
-            translated = fix_casing_punctuation_srt(translated, tgt)
+        if looks_like_srt(work):
+            translated = translate_srt(work, src, tgt)
         else:
-            translated = fix_casing_punctuation_text(translated, tgt)
+            translated = translate_text_fast(work, src, tgt)
 
-    return jsonify({
-        "ok": True,
-        "result": translated,
-        "glossary_hits": glossary_hits,
-        "post_hits": post_hits
-    })
+        if USE_POST_RULES and POST_RULES:
+            translated, post_hits = apply_map(translated, POST_RULES)
+
+        if FIX_CASING:
+            if looks_like_srt(translated):
+                translated = fix_casing_punctuation_srt(translated, tgt)
+            else:
+                translated = fix_casing_punctuation_text(translated, tgt)
+
+        return jsonify({
+            "ok": True,
+            "result": translated,
+            "glossary_hits": glossary_hits,
+            "post_hits": post_hits
+        })
+
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "result": "",
+            "error": str(e),
+            "glossary_hits": glossary_hits,
+            "post_hits": post_hits
+        }), 500
 
 
 if __name__ == "__main__":
