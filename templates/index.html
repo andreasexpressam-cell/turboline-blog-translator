@@ -1,271 +1,440 @@
 <!DOCTYPE html>
 <html lang="el">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ title }}</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ title or "TurboLine Blog Translator" }}</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: linear-gradient(135deg, #0d2a63, #0a1f47);
+      color: #fff;
+    }
+
+    .wrap {
+      max-width: 1180px;
+      margin: 32px auto;
+      padding: 0 16px;
+      box-sizing: border-box;
+    }
+
+    .app {
+      background: rgba(5, 18, 46, 0.96);
+      border: 1px solid rgba(120, 160, 255, 0.25);
+      border-radius: 22px;
+      padding: 26px;
+      box-sizing: border-box;
+      box-shadow: 0 10px 35px rgba(0, 0, 0, 0.25);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 54px;
+      line-height: 1.05;
+      color: #bdd3ff;
+      font-weight: 800;
+    }
+
+    .sub {
+      margin: 0 0 24px;
+      color: #d8e4ff;
+      font-size: 19px;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 22px;
+    }
+
+    select, button {
+      height: 54px;
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 700;
+      box-sizing: border-box;
+    }
+
+    select {
+      min-width: 170px;
+      padding: 0 16px;
+      border: 1px solid #3a5b96;
+      background: #13284f;
+      color: #fff;
+      outline: none;
+    }
+
+    select option {
+      background: #13284f;
+      color: #fff;
+    }
+
+    button {
+      border: 0;
+      color: #fff;
+      cursor: pointer;
+      padding: 0 22px;
+    }
+
+    .primary {
+      background: #6d8dff;
+    }
+
+    .secondary {
+      background: #64779d;
+    }
+
+    button:disabled {
+      opacity: 0.7;
+      cursor: wait;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 22px;
+    }
+
+    .panel h3 {
+      margin: 0 0 10px;
+      font-size: 18px;
+      color: #fff;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 460px;
+      background: #051327;
+      color: #fff;
+      border: 1px solid #284776;
+      border-radius: 16px;
+      padding: 16px;
+      font-size: 15px;
+      line-height: 1.55;
+      resize: vertical;
+      box-sizing: border-box;
+      outline: none;
+    }
+
+    textarea::placeholder {
+      color: #8ea7d4;
+      opacity: 1;
+    }
+
+    .status {
+      margin-top: 18px;
+      color: #b8d2ff;
+      font-size: 16px;
+      min-height: 24px;
+    }
+
+    @media (max-width: 900px) {
+      h1 {
+        font-size: 38px;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      select, button {
+        width: 100%;
+      }
+
+      textarea {
+        min-height: 320px;
+      }
+    }
+  </style>
 </head>
 <body>
-  <div class="container">
-    <h1>TurboLine Blog Translator</h1>
-    <p class="sub">Γρήγορη μετάφραση κειμένου και SRT</p>
+  <div class="wrap">
+    <div class="app">
+      <h1>TurboLine Blog Translator</h1>
+      <p class="sub">Γρήγορη μετάφραση κειμένου και SRT</p>
 
-    <div class="toolbar">
-      <select id="src_lang">
-        <option value="auto">Αυτόματο</option>
-        <option value="en">Αγγλικά</option>
-        <option value="fr">Γαλλικά</option>
-        <option value="it">Ιταλικά</option>
-        <option value="de">Γερμανικά</option>
-        <option value="es">Ισπανικά</option>
-        <option value="pt">Πορτογαλικά</option>
-        <option value="ar">Αραβικά</option>
-        <option value="nl">Ολλανδικά</option>
-        <option value="ja">Ιαπωνικά</option>
-        <option value="ru">Ρωσικά</option>
-        <option value="tr">Τουρκικά</option>
-        <option value="el">Ελληνικά</option>
-      </select>
+      <div class="controls">
+        <select id="src_lang">
+          <option value="auto">Αυτόματο</option>
+          <option value="en">Αγγλικά</option>
+          <option value="el">Ελληνικά</option>
+          <option value="fr">Γαλλικά</option>
+          <option value="it">Ιταλικά</option>
+          <option value="de">Γερμανικά</option>
+          <option value="es">Ισπανικά</option>
+          <option value="pt">Πορτογαλικά</option>
+          <option value="tr">Τουρκικά</option>
+          <option value="ru">Ρωσικά</option>
+        </select>
 
-      <select id="tgt_lang">
-        <option value="el" selected>Ελληνικά</option>
-        <option value="en">Αγγλικά</option>
-        <option value="fr">Γαλλικά</option>
-        <option value="it">Ιταλικά</option>
-        <option value="de">Γερμανικά</option>
-        <option value="es">Ισπανικά</option>
-        <option value="pt">Πορτογαλικά</option>
-        <option value="ar">Αραβικά</option>
-        <option value="nl">Ολλανδικά</option>
-        <option value="ja">Ιαπωνικά</option>
-        <option value="ru">Ρωσικά</option>
-        <option value="tr">Τουρκικά</option>
-      </select>
+        <select id="tgt_lang">
+          <option value="el">Ελληνικά</option>
+          <option value="en">Αγγλικά</option>
+          <option value="fr">Γαλλικά</option>
+          <option value="it">Ιταλικά</option>
+          <option value="de">Γερμανικά</option>
+          <option value="es">Ισπανικά</option>
+          <option value="pt">Πορτογαλικά</option>
+          <option value="tr">Τουρκικά</option>
+          <option value="ru">Ρωσικά</option>
+        </select>
 
-      <button id="translate_btn">Μετάφραση</button>
-      <button id="clear_btn" class="secondary">Καθάρισμα</button>
-    </div>
-
-    <div class="panes">
-      <div class="pane">
-        <label for="input_text">Πρωτότυπο</label>
-        <textarea id="input_text" placeholder="Κάνε επικόλληση κειμένου ή SRT εδώ..."></textarea>
+        <button id="translate_btn" class="primary" type="button">Μετάφραση</button>
+        <button id="copy_btn" class="secondary" type="button">Αντιγραφή</button>
+        <button id="clear_btn" class="secondary" type="button">Καθάρισμα</button>
       </div>
-      <div class="pane">
-        <label for="output_text">Αποτέλεσμα</label>
-        <textarea id="output_text" readonly></textarea>
-      </div>
-    </div>
 
-    <div class="actions">
-      <button id="copy_btn" class="secondary">Αντιγραφή αποτελέσματος</button>
-      <span id="status">Έτοιμο</span>
+      <div class="grid">
+        <div class="panel">
+          <h3>Πρωτότυπο</h3>
+          <textarea id="input_text" placeholder="Κάνε επικόλληση κειμένου ή SRT εδώ..."></textarea>
+        </div>
+
+        <div class="panel">
+          <h3>Αποτέλεσμα</h3>
+          <textarea id="output_text" placeholder="Η μετάφραση θα εμφανιστεί εδώ..." readonly></textarea>
+        </div>
+      </div>
+
+      <div id="status" class="status">Έτοιμο</div>
     </div>
   </div>
 
-<script>
-const inputText = document.getElementById("input_text");
-const outputText = document.getElementById("output_text");
-const statusEl = document.getElementById("status");
-const translateBtn = document.getElementById("translate_btn");
-const clearBtn = document.getElementById("clear_btn");
-const copyBtn = document.getElementById("copy_btn");
+  <script>
+    const inputText = document.getElementById("input_text");
+    const outputText = document.getElementById("output_text");
+    const statusEl = document.getElementById("status");
+    const translateBtn = document.getElementById("translate_btn");
+    const clearBtn = document.getElementById("clear_btn");
+    const copyBtn = document.getElementById("copy_btn");
+    const srcEl = document.getElementById("src_lang");
+    const tgtEl = document.getElementById("tgt_lang");
 
-const API_URL = "/api/translate";
-const SRT_TIME_RE = /^\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3}$/;
+    const API_URL = "/api/translate";
+    const SRT_TIME_RE = /^\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3}$/;
 
-// πιο συντηρητικό split στο frontend
-const FRONTEND_SRT_BLOCKS_PER_CHUNK = 45;
+    const FRONTEND_SRT_BLOCKS_PER_CHUNK = 20;
+    const REQUEST_DELAY_MS = 500;
+    const RETRY_COUNT = 3;
+    const RETRY_DELAY_MS = 1200;
 
-function normalizeNewlines(text) {
-  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-}
-
-function looksLikeSrt(text) {
-  return normalizeNewlines(text)
-    .split("\n")
-    .some(line => SRT_TIME_RE.test(line.trim()));
-}
-
-function splitSrtIntoBlocks(text) {
-  const normalized = normalizeNewlines(text).trim();
-  if (!normalized) return [];
-  return normalized.split(/\n{2,}/);
-}
-
-function isValidSrtBlock(block) {
-  const lines = block.split("\n");
-  if (lines.length < 2) return false;
-  const idx = (lines[0] || "").trim();
-  const timing = (lines[1] || "").trim();
-  return /^\d+$/.test(idx) && SRT_TIME_RE.test(timing);
-}
-
-function groupSrtBlocks(blocks, maxBlocksPerChunk = FRONTEND_SRT_BLOCKS_PER_CHUNK) {
-  const groups = [];
-  let current = [];
-
-  for (const block of blocks) {
-    current.push(block);
-    if (current.length >= maxBlocksPerChunk) {
-      groups.push(current);
-      current = [];
-    }
-  }
-
-  if (current.length) groups.push(current);
-  return groups;
-}
-
-function reindexSrtChunk(blocks, startIndex = 1) {
-  const out = [];
-  let counter = startIndex;
-
-  for (const block of blocks) {
-    const lines = block.split("\n");
-    if (lines.length >= 2 && isValidSrtBlock(block)) {
-      lines[0] = String(counter++);
-      out.push(lines.join("\n"));
-    } else {
-      out.push(block);
-    }
-  }
-
-  return out;
-}
-
-function restoreGlobalSrtNumbering(fullText) {
-  const blocks = splitSrtIntoBlocks(fullText);
-  let counter = 1;
-  const out = [];
-
-  for (const block of blocks) {
-    const lines = block.split("\n");
-    if (lines.length >= 2 && isValidSrtBlock(block)) {
-      lines[0] = String(counter++);
-      out.push(lines.join("\n"));
-    } else {
-      out.push(block);
-    }
-  }
-
-  return out.join("\n\n") + "\n";
-}
-
-async function callTranslateApi(text, srcLang, tgtLang) {
-  const payload = {
-    text: text,
-    src_lang: srcLang,
-    tgt_lang: tgtLang
-  };
-
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify(payload)
-  });
-
-  const data = await res.json().catch(() => ({}));
-
-  if (!res.ok || !data.ok) {
-    const msg = data.error || `HTTP ${res.status}`;
-    throw new Error(msg);
-  }
-
-  return data.result || "";
-}
-
-async function translateNormalText(text, srcLang, tgtLang) {
-  statusEl.textContent = "Μετάφραση...";
-  return await callTranslateApi(text, srcLang, tgtLang);
-}
-
-async function translateLargeSrt(text, srcLang, tgtLang) {
-  const blocks = splitSrtIntoBlocks(text);
-
-  if (!blocks.length) {
-    return "";
-  }
-
-  const grouped = groupSrtBlocks(blocks, FRONTEND_SRT_BLOCKS_PER_CHUNK);
-  const translatedGroups = [];
-
-  for (let i = 0; i < grouped.length; i++) {
-    const group = grouped[i];
-    const reindexed = reindexSrtChunk(group, 1).join("\n\n") + "\n";
-
-    statusEl.textContent = `Μετάφραση μέρους ${i + 1} από ${grouped.length}...`;
-
-    const translatedChunk = await callTranslateApi(reindexed, srcLang, tgtLang);
-    translatedGroups.push(translatedChunk);
-
-    // μικρό διάλειμμα ανάμεσα στα requests
-    await new Promise(resolve => setTimeout(resolve, 180));
-  }
-
-  const merged = translatedGroups
-    .map(part => normalizeNewlines(part).trim())
-    .filter(Boolean)
-    .join("\n\n");
-
-  return restoreGlobalSrtNumbering(merged);
-}
-
-async function handleTranslate() {
-  const text = inputText.value.trim();
-  const srcLang = document.getElementById("src_lang").value;
-  const tgtLang = document.getElementById("tgt_lang").value;
-
-  if (!text) {
-    statusEl.textContent = "Βάλε κείμενο πρώτα.";
-    outputText.value = "";
-    return;
-  }
-
-  translateBtn.disabled = true;
-  clearBtn.disabled = true;
-  copyBtn.disabled = true;
-  outputText.value = "";
-
-  try {
-    let result = "";
-
-    if (looksLikeSrt(text)) {
-      result = await translateLargeSrt(text, srcLang, tgtLang);
-    } else {
-      result = await translateNormalText(text, srcLang, tgtLang);
+    function normalizeNewlines(text) {
+      return (text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
     }
 
-    outputText.value = result;
-    statusEl.textContent = "Έτοιμο";
-  } catch (err) {
-    console.error(err);
-    statusEl.textContent = `Σφάλμα: ${err.message || "Κάτι πήγε στραβά."}`;
-    outputText.value = "";
-  } finally {
-    translateBtn.disabled = false;
-    clearBtn.disabled = false;
-    copyBtn.disabled = false;
-  }
-}
+    function looksLikeSrt(text) {
+      return normalizeNewlines(text)
+        .split("\n")
+        .some(line => SRT_TIME_RE.test(line.trim()));
+    }
 
-translateBtn.addEventListener("click", handleTranslate);
+    function splitSrtIntoBlocks(text) {
+      const normalized = normalizeNewlines(text).trim();
+      if (!normalized) return [];
+      return normalized.split(/\n{2,}/);
+    }
 
-clearBtn.addEventListener("click", () => {
-  inputText.value = "";
-  outputText.value = "";
-  statusEl.textContent = "Έτοιμο";
-});
+    function isValidSrtBlock(block) {
+      const lines = block.split("\n");
+      if (lines.length < 2) return false;
+      const idx = (lines[0] || "").trim();
+      const timing = (lines[1] || "").trim();
+      return /^\d+$/.test(idx) && SRT_TIME_RE.test(timing);
+    }
 
-copyBtn.addEventListener("click", async () => {
-  try {
-    await navigator.clipboard.writeText(outputText.value);
-    statusEl.textContent = "Αντιγράφηκε";
-  } catch {
-    statusEl.textContent = "Δεν έγινε αντιγραφή";
-  }
-});
-</script>
+    function groupSrtBlocks(blocks, maxBlocksPerChunk) {
+      const groups = [];
+      let current = [];
+
+      for (const block of blocks) {
+        current.push(block);
+        if (current.length >= maxBlocksPerChunk) {
+          groups.push(current);
+          current = [];
+        }
+      }
+
+      if (current.length) groups.push(current);
+      return groups;
+    }
+
+    function reindexSrtChunk(blocks, startIndex) {
+      const out = [];
+      let counter = startIndex;
+
+      for (const block of blocks) {
+        const lines = block.split("\n");
+        if (isValidSrtBlock(block)) {
+          lines[0] = String(counter++);
+        }
+        out.push(lines.join("\n"));
+      }
+
+      return out;
+    }
+
+    function restoreGlobalSrtNumbering(fullText) {
+      const blocks = splitSrtIntoBlocks(fullText);
+      const out = [];
+      let counter = 1;
+
+      for (const block of blocks) {
+        const lines = block.split("\n");
+        if (isValidSrtBlock(block)) {
+          lines[0] = String(counter++);
+        }
+        out.push(lines.join("\n"));
+      }
+
+      return out.join("\n\n") + "\n";
+    }
+
+    function setBusy(isBusy) {
+      translateBtn.disabled = isBusy;
+      clearBtn.disabled = isBusy;
+      copyBtn.disabled = isBusy;
+      translateBtn.textContent = isBusy ? "Μεταφράζεται..." : "Μετάφραση";
+    }
+
+    function delay(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function callTranslateApi(text, srcLang, tgtLang, retries = RETRY_COUNT) {
+      let lastError = null;
+
+      for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+          const res = await fetch(API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text: text,
+              src_lang: srcLang,
+              tgt_lang: tgtLang
+            })
+          });
+
+          const data = await res.json().catch(() => ({}));
+
+          if (!res.ok) {
+            throw new Error(data.error || ("HTTP " + res.status));
+          }
+
+          if (!data.ok) {
+            throw new Error(data.error || "Άγνωστο σφάλμα.");
+          }
+
+          return data.result || "";
+        } catch (err) {
+          lastError = err;
+          if (attempt < retries) {
+            statusEl.textContent = `Προσωρινό σφάλμα, νέα προσπάθεια ${attempt + 1}/${retries}...`;
+            await delay(RETRY_DELAY_MS);
+          }
+        }
+      }
+
+      throw lastError || new Error("Αποτυχία επικοινωνίας με τον server.");
+    }
+
+    async function translateNormalText(text, srcLang, tgtLang) {
+      statusEl.textContent = "Γίνεται μετάφραση...";
+      return await callTranslateApi(text, srcLang, tgtLang);
+    }
+
+    async function translateLargeSrt(text, srcLang, tgtLang) {
+      const blocks = splitSrtIntoBlocks(text);
+      if (!blocks.length) return "";
+
+      const groups = groupSrtBlocks(blocks, FRONTEND_SRT_BLOCKS_PER_CHUNK);
+      const translatedGroups = [];
+
+      for (let i = 0; i < groups.length; i++) {
+        const group = groups[i];
+        const reindexedChunk = reindexSrtChunk(group, 1).join("\n\n") + "\n";
+
+        statusEl.textContent = `Μετάφραση μέρους ${i + 1} από ${groups.length}...`;
+
+        const translatedChunk = await callTranslateApi(
+          reindexedChunk,
+          srcLang,
+          tgtLang
+        );
+
+        translatedGroups.push(translatedChunk);
+        await delay(REQUEST_DELAY_MS);
+      }
+
+      const merged = translatedGroups
+        .map(part => normalizeNewlines(part).trim())
+        .filter(Boolean)
+        .join("\n\n");
+
+      return restoreGlobalSrtNumbering(merged);
+    }
+
+    async function handleTranslate() {
+      const text = inputText.value.trim();
+      const srcLang = srcEl.value;
+      const tgtLang = tgtEl.value;
+
+      if (!text) {
+        statusEl.textContent = "Βάλε κείμενο πρώτα.";
+        outputText.value = "";
+        return;
+      }
+
+      setBusy(true);
+      outputText.value = "";
+
+      try {
+        let result = "";
+
+        if (looksLikeSrt(text)) {
+          result = await translateLargeSrt(text, srcLang, tgtLang);
+        } else {
+          result = await translateNormalText(text, srcLang, tgtLang);
+        }
+
+        outputText.value = result;
+        statusEl.textContent = "Η μετάφραση ολοκληρώθηκε.";
+      } catch (err) {
+        console.error(err);
+        outputText.value = "";
+        statusEl.textContent = `Σφάλμα: ${err.message || "Κάτι πήγε στραβά."}`;
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function copyResult() {
+      const text = outputText.value.trim();
+
+      if (!text) {
+        statusEl.textContent = "Δεν υπάρχει μετάφραση για αντιγραφή.";
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(text);
+        statusEl.textContent = "Η μετάφραση αντιγράφηκε.";
+      } catch {
+        statusEl.textContent = "Δεν έγινε αντιγραφή.";
+      }
+    }
+
+    function clearAll() {
+      inputText.value = "";
+      outputText.value = "";
+      statusEl.textContent = "Έτοιμο";
+    }
+
+    translateBtn.addEventListener("click", handleTranslate);
+    copyBtn.addEventListener("click", copyResult);
+    clearBtn.addEventListener("click", clearAll);
+  </script>
 </body>
 </html>
