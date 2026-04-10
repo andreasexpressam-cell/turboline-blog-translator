@@ -68,39 +68,197 @@
 const inputText = document.getElementById("input_text");
 const outputText = document.getElementById("output_text");
 const statusEl = document.getElementById("status");
+const translateBtn = document.getElementById("translate_btn");
+const clearBtn = document.getElementById("clear_btn");
+const copyBtn = document.getElementById("copy_btn");
 
-document.getElementById("translate_btn").addEventListener("click", async () => {
+const API_URL = "/api/translate";
+const SRT_TIME_RE = /^\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3}$/;
+
+// πιο συντηρητικό split στο frontend
+const FRONTEND_SRT_BLOCKS_PER_CHUNK = 45;
+
+function normalizeNewlines(text) {
+  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+function looksLikeSrt(text) {
+  return normalizeNewlines(text)
+    .split("\n")
+    .some(line => SRT_TIME_RE.test(line.trim()));
+}
+
+function splitSrtIntoBlocks(text) {
+  const normalized = normalizeNewlines(text).trim();
+  if (!normalized) return [];
+  return normalized.split(/\n{2,}/);
+}
+
+function isValidSrtBlock(block) {
+  const lines = block.split("\n");
+  if (lines.length < 2) return false;
+  const idx = (lines[0] || "").trim();
+  const timing = (lines[1] || "").trim();
+  return /^\d+$/.test(idx) && SRT_TIME_RE.test(timing);
+}
+
+function groupSrtBlocks(blocks, maxBlocksPerChunk = FRONTEND_SRT_BLOCKS_PER_CHUNK) {
+  const groups = [];
+  let current = [];
+
+  for (const block of blocks) {
+    current.push(block);
+    if (current.length >= maxBlocksPerChunk) {
+      groups.push(current);
+      current = [];
+    }
+  }
+
+  if (current.length) groups.push(current);
+  return groups;
+}
+
+function reindexSrtChunk(blocks, startIndex = 1) {
+  const out = [];
+  let counter = startIndex;
+
+  for (const block of blocks) {
+    const lines = block.split("\n");
+    if (lines.length >= 2 && isValidSrtBlock(block)) {
+      lines[0] = String(counter++);
+      out.push(lines.join("\n"));
+    } else {
+      out.push(block);
+    }
+  }
+
+  return out;
+}
+
+function restoreGlobalSrtNumbering(fullText) {
+  const blocks = splitSrtIntoBlocks(fullText);
+  let counter = 1;
+  const out = [];
+
+  for (const block of blocks) {
+    const lines = block.split("\n");
+    if (lines.length >= 2 && isValidSrtBlock(block)) {
+      lines[0] = String(counter++);
+      out.push(lines.join("\n"));
+    } else {
+      out.push(block);
+    }
+  }
+
+  return out.join("\n\n") + "\n";
+}
+
+async function callTranslateApi(text, srcLang, tgtLang) {
   const payload = {
-    text: inputText.value,
-    src_lang: document.getElementById("src_lang").value,
-    tgt_lang: document.getElementById("tgt_lang").value
+    text: text,
+    src_lang: srcLang,
+    tgt_lang: tgtLang
   };
 
+  const res = await fetch(API_URL, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(payload)
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok || !data.ok) {
+    const msg = data.error || `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+
+  return data.result || "";
+}
+
+async function translateNormalText(text, srcLang, tgtLang) {
   statusEl.textContent = "Μετάφραση...";
+  return await callTranslateApi(text, srcLang, tgtLang);
+}
+
+async function translateLargeSrt(text, srcLang, tgtLang) {
+  const blocks = splitSrtIntoBlocks(text);
+
+  if (!blocks.length) {
+    return "";
+  }
+
+  const grouped = groupSrtBlocks(blocks, FRONTEND_SRT_BLOCKS_PER_CHUNK);
+  const translatedGroups = [];
+
+  for (let i = 0; i < grouped.length; i++) {
+    const group = grouped[i];
+    const reindexed = reindexSrtChunk(group, 1).join("\n\n") + "\n";
+
+    statusEl.textContent = `Μετάφραση μέρους ${i + 1} από ${grouped.length}...`;
+
+    const translatedChunk = await callTranslateApi(reindexed, srcLang, tgtLang);
+    translatedGroups.push(translatedChunk);
+
+    // μικρό διάλειμμα ανάμεσα στα requests
+    await new Promise(resolve => setTimeout(resolve, 180));
+  }
+
+  const merged = translatedGroups
+    .map(part => normalizeNewlines(part).trim())
+    .filter(Boolean)
+    .join("\n\n");
+
+  return restoreGlobalSrtNumbering(merged);
+}
+
+async function handleTranslate() {
+  const text = inputText.value.trim();
+  const srcLang = document.getElementById("src_lang").value;
+  const tgtLang = document.getElementById("tgt_lang").value;
+
+  if (!text) {
+    statusEl.textContent = "Βάλε κείμενο πρώτα.";
+    outputText.value = "";
+    return;
+  }
+
+  translateBtn.disabled = true;
+  clearBtn.disabled = true;
+  copyBtn.disabled = true;
   outputText.value = "";
 
   try {
-    const res = await fetch("/api/translate", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
-    outputText.value = data.result || "";
-    statusEl.textContent = `Έτοιμο | Glossary: ${data.glossary_hits || 0} | Post-rules: ${data.post_hits || 0}`;
-  } catch (err) {
-    statusEl.textContent = "Σφάλμα";
-    outputText.value = "Κάτι πήγε στραβά.";
-  }
-});
+    let result = "";
 
-document.getElementById("clear_btn").addEventListener("click", () => {
+    if (looksLikeSrt(text)) {
+      result = await translateLargeSrt(text, srcLang, tgtLang);
+    } else {
+      result = await translateNormalText(text, srcLang, tgtLang);
+    }
+
+    outputText.value = result;
+    statusEl.textContent = "Έτοιμο";
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = `Σφάλμα: ${err.message || "Κάτι πήγε στραβά."}`;
+    outputText.value = "";
+  } finally {
+    translateBtn.disabled = false;
+    clearBtn.disabled = false;
+    copyBtn.disabled = false;
+  }
+}
+
+translateBtn.addEventListener("click", handleTranslate);
+
+clearBtn.addEventListener("click", () => {
   inputText.value = "";
   outputText.value = "";
   statusEl.textContent = "Έτοιμο";
 });
 
-document.getElementById("copy_btn").addEventListener("click", async () => {
+copyBtn.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(outputText.value);
     statusEl.textContent = "Αντιγράφηκε";
