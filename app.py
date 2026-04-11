@@ -38,13 +38,20 @@ USE_GLOSSARY = True
 USE_POST_RULES = True
 FIX_CASING = True
 
-# Πιο συντηρητικά όρια για free Render / μεγάλα SRT
-SRT_BATCH_SIZE = 35
-SRT_BATCH_MAX_CHARS = 1600
-TEXT_BATCH_SIZE = 12
-TEXT_BATCH_MAX_CHARS = 2200
+# Ρυθμίσεις tuned για Render Starter:
+# πιο γρήγορο από πριν, αλλά ακόμα ασφαλές
+SRT_BATCH_SIZE = 20
+SRT_BATCH_MAX_CHARS = 1200
 
-REQUEST_SLEEP_BETWEEN_BATCHES = 0.15
+TEXT_BATCH_SIZE = 8
+TEXT_BATCH_MAX_CHARS = 1600
+
+REQUEST_SLEEP_BETWEEN_BATCHES = 0.08
+
+# Retry / split safety
+TRANSLATE_RETRIES = 2
+TRANSLATE_RETRY_SLEEP = 0.35
+MIN_RECURSIVE_BATCH_SIZE = 2
 
 
 def load_map_file(path: str):
@@ -93,11 +100,6 @@ def looks_like_srt(text: str) -> bool:
     return any(SRT_TIME_RE.match(line.strip()) for line in text.splitlines())
 
 
-def chunk_list(items, n):
-    for i in range(0, len(items), n):
-        yield items[i:i + n]
-
-
 def chunk_by_char_budget(items, max_items: int, max_chars: int):
     bucket = []
     current_chars = 0
@@ -117,7 +119,7 @@ def chunk_by_char_budget(items, max_items: int, max_chars: int):
         yield bucket
 
 
-def safe_translate_text(text: str, src_lang: str, tgt_lang: str, retries: int = 2):
+def safe_translate_text(text: str, src_lang: str, tgt_lang: str, retries: int = TRANSLATE_RETRIES):
     if not text.strip():
         return ""
 
@@ -135,9 +137,23 @@ def safe_translate_text(text: str, src_lang: str, tgt_lang: str, retries: int = 
         except Exception as e:
             last_error = e
             if attempt < retries:
-                time.sleep(0.4)
+                time.sleep(TRANSLATE_RETRY_SLEEP)
 
+    # fallback: επιστρέφει το αρχικό για να μη σπάει το flow
     return text
+
+
+def _normalize_batch_output(out, expected_len: int):
+    if not out or len(out) != expected_len:
+        return None
+
+    normalized = []
+    for x in out:
+        if x is None:
+            normalized.append("")
+        else:
+            normalized.append(str(x))
+    return normalized
 
 
 def safe_translate_batch(lines, src_lang: str, tgt_lang: str):
@@ -147,22 +163,33 @@ def safe_translate_batch(lines, src_lang: str, tgt_lang: str):
     src_lang = LANG_MAP.get(src_lang, src_lang)
     tgt_lang = LANG_MAP.get(tgt_lang, tgt_lang)
 
-    # 1) Προσπάθεια με translate_batch
-    try:
-        tr = GoogleTranslator(source=src_lang, target=tgt_lang)
-        out = tr.translate_batch(lines)
-        if out and len(out) == len(lines):
-            normalized = []
-            for x in out:
-                if x is None:
-                    normalized.append("")
-                else:
-                    normalized.append(str(x))
-            return normalized
-    except Exception:
-        pass
+    # Αν είναι πολύ μικρό, μία-μία για μέγιστη σταθερότητα
+    if len(lines) <= 1:
+        return [safe_translate_text(x, src_lang, tgt_lang) for x in lines]
 
-    # 2) Fallback: μία-μία
+    # 1) Προσπάθεια με translate_batch + retries
+    last_error = None
+    for attempt in range(TRANSLATE_RETRIES + 1):
+        try:
+            tr = GoogleTranslator(source=src_lang, target=tgt_lang)
+            out = tr.translate_batch(lines)
+            normalized = _normalize_batch_output(out, len(lines))
+            if normalized is not None:
+                return normalized
+            raise RuntimeError("Invalid translate_batch output")
+        except Exception as e:
+            last_error = e
+            if attempt < TRANSLATE_RETRIES:
+                time.sleep(TRANSLATE_RETRY_SLEEP)
+
+    # 2) Αν σκάσει, σπάει μόνο του το batch σε δύο μισά
+    half = len(lines) // 2
+    if half >= MIN_RECURSIVE_BATCH_SIZE:
+        first = safe_translate_batch(lines[:half], src_lang, tgt_lang)
+        second = safe_translate_batch(lines[half:], src_lang, tgt_lang)
+        return first + second
+
+    # 3) Τελικό fallback: μία-μία
     return [safe_translate_text(x, src_lang, tgt_lang) for x in lines]
 
 
