@@ -46,10 +46,11 @@
       display: flex;
       flex-wrap: wrap;
       gap: 12px;
-      margin-bottom: 22px;
+      margin-bottom: 16px;
     }
 
-    select, button {
+    select,
+    button {
       height: 54px;
       border-radius: 14px;
       font-size: 16px;
@@ -87,8 +88,55 @@
     }
 
     button:disabled {
-      opacity: 0.7;
+      opacity: 0.72;
       cursor: wait;
+    }
+
+    .upload-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 22px;
+      align-items: stretch;
+    }
+
+    .upload-btn {
+      height: 54px;
+      padding: 0 22px;
+      border-radius: 14px;
+      border: 0;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      color: #fff;
+      box-sizing: border-box;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      background: #64779d;
+    }
+
+    .dropzone {
+      flex: 1 1 320px;
+      min-height: 54px;
+      border: 2px dashed #33568e;
+      border-radius: 14px;
+      background: #0c2345;
+      color: #bcd0f9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 10px 16px;
+      box-sizing: border-box;
+      transition: 0.15s ease;
+    }
+
+    .dropzone.dragover {
+      border-color: #7ea6ff;
+      background: #12305d;
+      color: #ffffff;
     }
 
     .grid {
@@ -97,10 +145,23 @@
       gap: 22px;
     }
 
+    .panel-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 10px 0;
+    }
+
     .panel h3 {
-      margin: 0 0 10px;
+      margin: 0;
       font-size: 18px;
       color: #fff;
+    }
+
+    .mini-info {
+      color: #95b6ee;
+      font-size: 13px;
     }
 
     textarea {
@@ -123,10 +184,37 @@
       opacity: 1;
     }
 
-    .status {
+    .progress-wrap {
       margin-top: 18px;
+    }
+
+    .progress-text {
+      min-height: 20px;
       color: #b8d2ff;
-      font-size: 16px;
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 10px;
+      border-radius: 999px;
+      background: #0b2243;
+      overflow: hidden;
+      border: 1px solid #274777;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #6d8dff, #8fe0ff);
+      transition: width 0.2s ease;
+    }
+
+    .status {
+      margin-top: 14px;
+      color: #9fc0ff;
+      font-size: 15px;
       min-height: 24px;
     }
 
@@ -139,8 +227,14 @@
         grid-template-columns: 1fr;
       }
 
-      select, button {
+      select,
+      button,
+      .upload-btn {
         width: 100%;
+      }
+
+      .upload-row {
+        flex-direction: column;
       }
 
       textarea {
@@ -184,17 +278,39 @@
         <button id="translate_btn" class="primary" type="button">Μετάφραση</button>
         <button id="copy_btn" class="secondary" type="button">Αντιγραφή</button>
         <button id="clear_btn" class="secondary" type="button">Καθάρισμα</button>
+        <button id="download_btn" class="secondary" type="button">Κατέβασμα SRT</button>
+      </div>
+
+      <div class="upload-row">
+        <label for="srt_file" class="upload-btn">Φόρτωση SRT</label>
+        <input id="srt_file" type="file" accept=".srt,.txt" hidden />
+        <div id="dropzone" class="dropzone">
+          Σύρε εδώ αρχείο SRT ή πάτα «Φόρτωση SRT»
+        </div>
       </div>
 
       <div class="grid">
         <div class="panel">
-          <h3>Πρωτότυπο</h3>
+          <div class="panel-head">
+            <h3>Πρωτότυπο</h3>
+            <span id="input_info" class="mini-info"></span>
+          </div>
           <textarea id="input_text" placeholder="Κάνε επικόλληση κειμένου ή SRT εδώ..."></textarea>
         </div>
 
         <div class="panel">
-          <h3>Αποτέλεσμα</h3>
+          <div class="panel-head">
+            <h3>Αποτέλεσμα</h3>
+            <span id="output_info" class="mini-info"></span>
+          </div>
           <textarea id="output_text" placeholder="Η μετάφραση θα εμφανιστεί εδώ..." readonly></textarea>
+        </div>
+      </div>
+
+      <div class="progress-wrap">
+        <div id="progress_text" class="progress-text"></div>
+        <div class="progress-bar">
+          <div id="progress_fill" class="progress-fill"></div>
         </div>
       </div>
 
@@ -209,8 +325,15 @@
     const translateBtn = document.getElementById("translate_btn");
     const clearBtn = document.getElementById("clear_btn");
     const copyBtn = document.getElementById("copy_btn");
+    const downloadBtn = document.getElementById("download_btn");
     const srcEl = document.getElementById("src_lang");
     const tgtEl = document.getElementById("tgt_lang");
+    const fileEl = document.getElementById("srt_file");
+    const dropzoneEl = document.getElementById("dropzone");
+    const progressTextEl = document.getElementById("progress_text");
+    const progressFillEl = document.getElementById("progress_fill");
+    const inputInfoEl = document.getElementById("input_info");
+    const outputInfoEl = document.getElementById("output_info");
 
     const API_URL = "/api/translate";
     const SRT_TIME_RE = /^\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3}$/;
@@ -295,11 +418,51 @@
       translateBtn.disabled = isBusy;
       clearBtn.disabled = isBusy;
       copyBtn.disabled = isBusy;
+      downloadBtn.disabled = isBusy;
       translateBtn.textContent = isBusy ? "Μεταφράζεται..." : "Μετάφραση";
+    }
+
+    function setProgress(percent, text) {
+      progressFillEl.style.width = Math.max(0, Math.min(100, percent)) + "%";
+      progressTextEl.textContent = text || "";
+    }
+
+    function setStatus(msg) {
+      statusEl.textContent = msg || "";
     }
 
     function delay(ms) {
       return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    function updateInputInfo() {
+      const text = inputText.value || "";
+      if (!text.trim()) {
+        inputInfoEl.textContent = "";
+        return;
+      }
+
+      if (looksLikeSrt(text)) {
+        const blocks = splitSrtIntoBlocks(text);
+        inputInfoEl.textContent = "SRT • " + blocks.length + " blocks";
+      } else {
+        inputInfoEl.textContent = text.length + " χαρακτήρες";
+      }
+    }
+
+    function updateOutputInfo() {
+      const text = outputText.value || "";
+      if (!text.trim()) {
+        outputInfoEl.textContent = "";
+        return;
+      }
+
+      if (looksLikeSrt(text)) {
+        const blocks = splitSrtIntoBlocks(text);
+        outputInfoEl.textContent = "SRT • " + blocks.length + " blocks";
+      } else {
+        outputInfoEl.textContent = text.length + " χαρακτήρες";
+      }
     }
 
     async function callTranslateApi(text, srcLang, tgtLang, retries = RETRY_COUNT) {
@@ -331,7 +494,7 @@
         } catch (err) {
           lastError = err;
           if (attempt < retries) {
-            statusEl.textContent = `Προσωρινό σφάλμα, νέα προσπάθεια ${attempt + 1}/${retries}...`;
+            setStatus("Προσωρινό σφάλμα, νέα προσπάθεια " + (attempt + 1) + "/" + retries + "...");
             await delay(RETRY_DELAY_MS);
           }
         }
@@ -341,8 +504,11 @@
     }
 
     async function translateNormalText(text, srcLang, tgtLang) {
-      statusEl.textContent = "Γίνεται μετάφραση...";
-      return await callTranslateApi(text, srcLang, tgtLang);
+      setStatus("Γίνεται μετάφραση...");
+      setProgress(35, "Επεξεργασία κειμένου...");
+      const result = await callTranslateApi(text, srcLang, tgtLang);
+      setProgress(100, "Ολοκληρώθηκε");
+      return result;
     }
 
     async function translateLargeSrt(text, srcLang, tgtLang) {
@@ -356,7 +522,9 @@
         const group = groups[i];
         const reindexedChunk = reindexSrtChunk(group, 1).join("\n\n") + "\n";
 
-        statusEl.textContent = `Μετάφραση μέρους ${i + 1} από ${groups.length}...`;
+        const percent = Math.round((i / groups.length) * 100);
+        setProgress(percent, "Μετάφραση μέρους " + (i + 1) + " από " + groups.length + "...");
+        setStatus("Γίνεται μετάφραση μεγάλου SRT...");
 
         const translatedChunk = await callTranslateApi(
           reindexedChunk,
@@ -373,6 +541,7 @@
         .filter(Boolean)
         .join("\n\n");
 
+      setProgress(100, "Ολοκληρώθηκε");
       return restoreGlobalSrtNumbering(merged);
     }
 
@@ -382,13 +551,15 @@
       const tgtLang = tgtEl.value;
 
       if (!text) {
-        statusEl.textContent = "Βάλε κείμενο πρώτα.";
+        setStatus("Βάλε κείμενο πρώτα.");
         outputText.value = "";
         return;
       }
 
       setBusy(true);
       outputText.value = "";
+      updateOutputInfo();
+      setProgress(0, "");
 
       try {
         let result = "";
@@ -400,11 +571,14 @@
         }
 
         outputText.value = result;
-        statusEl.textContent = "Η μετάφραση ολοκληρώθηκε.";
+        updateOutputInfo();
+        setStatus("Η μετάφραση ολοκληρώθηκε.");
       } catch (err) {
         console.error(err);
         outputText.value = "";
-        statusEl.textContent = `Σφάλμα: ${err.message || "Κάτι πήγε στραβά."}`;
+        updateOutputInfo();
+        setProgress(0, "");
+        setStatus("Σφάλμα: " + (err.message || "Κάτι πήγε στραβά."));
       } finally {
         setBusy(false);
       }
@@ -414,27 +588,99 @@
       const text = outputText.value.trim();
 
       if (!text) {
-        statusEl.textContent = "Δεν υπάρχει μετάφραση για αντιγραφή.";
+        setStatus("Δεν υπάρχει μετάφραση για αντιγραφή.");
         return;
       }
 
       try {
         await navigator.clipboard.writeText(text);
-        statusEl.textContent = "Η μετάφραση αντιγράφηκε.";
+        setStatus("Η μετάφραση αντιγράφηκε.");
       } catch {
-        statusEl.textContent = "Δεν έγινε αντιγραφή.";
+        setStatus("Δεν έγινε αντιγραφή.");
       }
     }
 
     function clearAll() {
       inputText.value = "";
       outputText.value = "";
-      statusEl.textContent = "Έτοιμο";
+      updateInputInfo();
+      updateOutputInfo();
+      setProgress(0, "");
+      setStatus("Έτοιμο");
+      fileEl.value = "";
+      dropzoneEl.textContent = "Σύρε εδώ αρχείο SRT ή πάτα «Φόρτωση SRT»";
     }
+
+    function downloadSrt() {
+      const text = outputText.value.trim();
+      if (!text) {
+        setStatus("Δεν υπάρχει αποτέλεσμα για κατέβασμα.");
+        return;
+      }
+
+      const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "translated.srt";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+      setStatus("Το αρχείο SRT κατέβηκε.");
+    }
+
+    function loadTextFromFile(file) {
+      if (!file) return;
+
+      const isOk = /\.(srt|txt)$/i.test(file.name);
+      if (!isOk) {
+        setStatus("Δέχεται μόνο .srt ή .txt αρχεία.");
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        inputText.value = e.target.result || "";
+        updateInputInfo();
+        dropzoneEl.textContent = "Φορτώθηκε: " + file.name;
+        setStatus("Το αρχείο φορτώθηκε.");
+      };
+      reader.onerror = function () {
+        setStatus("Δεν διαβάστηκε το αρχείο.");
+      };
+      reader.readAsText(file, "utf-8");
+    }
+
+    fileEl.addEventListener("change", function () {
+      const file = this.files && this.files[0];
+      loadTextFromFile(file);
+    });
+
+    dropzoneEl.addEventListener("dragover", function (e) {
+      e.preventDefault();
+      dropzoneEl.classList.add("dragover");
+    });
+
+    dropzoneEl.addEventListener("dragleave", function () {
+      dropzoneEl.classList.remove("dragover");
+    });
+
+    dropzoneEl.addEventListener("drop", function (e) {
+      e.preventDefault();
+      dropzoneEl.classList.remove("dragover");
+      const file = e.dataTransfer.files && e.dataTransfer.files[0];
+      loadTextFromFile(file);
+    });
+
+    inputText.addEventListener("input", updateInputInfo);
 
     translateBtn.addEventListener("click", handleTranslate);
     copyBtn.addEventListener("click", copyResult);
     clearBtn.addEventListener("click", clearAll);
+    downloadBtn.addEventListener("click", downloadSrt);
+
+    updateInputInfo();
+    updateOutputInfo();
   </script>
 </body>
 </html>
